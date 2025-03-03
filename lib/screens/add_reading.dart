@@ -16,12 +16,12 @@ class _AddReadingPageState extends State<AddReadingPage> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
   String systolic = '';
   String diastolic = '';
-  String pulse = '';
-  String? selectedLaterality;
-  String? selectedProfile;
+  String heartRate = '';
+  String? selectedArmSide;
+  int? selectedProfileId;
   DateTime selectedDate = DateTime.now();
-  final List<String> lateralityOptions = ['Left Arm', 'Right Arm'];
-  List<String> profileOptions = [];
+  final List<String> armSideOptions = ['Left', 'Right'];
+  List<Map<String, dynamic>> profileOptions = [];
 
   @override
   void initState() {
@@ -30,9 +30,9 @@ class _AddReadingPageState extends State<AddReadingPage> {
   }
 
   Future<void> _loadProfiles() async {
-    final profiles = await _dbHelper.getAllProfiles();
+    final profiles = await _dbHelper.getProfiles();
     setState(() {
-      profileOptions = profiles.map((p) => p['name'] as String).toList();
+      profileOptions = profiles;
     });
   }
 
@@ -43,7 +43,7 @@ class _AddReadingPageState extends State<AddReadingPage> {
       firstDate: DateTime(2000),
       lastDate: DateTime.now(),
     );
-    if (picked != null) {
+    if (picked != null && picked != selectedDate) {
       setState(() => selectedDate = picked);
     }
   }
@@ -52,15 +52,15 @@ class _AddReadingPageState extends State<AddReadingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Add Blood Pressure Reading'),
+        title: const Text('Add Blood Pressure Reading'),
         backgroundColor: Colors.blue.shade300,
         actions: [
           IconButton(
-            icon: Icon(Icons.person_add),
+            icon: const Icon(Icons.person_add),
             onPressed: () async {
               await Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => ProfilePage()),
+                MaterialPageRoute(builder: (context) =>  ProfilePage()),
               );
               _loadProfiles();
             },
@@ -77,80 +77,78 @@ class _AddReadingPageState extends State<AddReadingPage> {
                 decoration: InputDecoration(
                   labelText: 'Date',
                   suffixIcon: IconButton(
-                    icon: Icon(Icons.calendar_today),
+                    icon: const Icon(Icons.calendar_today),
                     onPressed: () => _selectDate(context),
                   ),
                 ),
                 readOnly: true,
                 controller: TextEditingController(
-                    text: DateFormat('yyyy-MM-dd').format(selectedDate)),
+                    text: DateFormat('yyyy-MM-dd – HH:mm').format(selectedDate)),
                 validator: (value) =>
                     value?.isEmpty ?? true ? 'Select date' : null,
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               TextFormField(
-                decoration: InputDecoration(labelText: 'Systolic (mmHg)'),
+                decoration: const InputDecoration(labelText: 'Systolic (mmHg)'),
                 keyboardType: TextInputType.number,
                 onChanged: (v) => systolic = v,
                 validator: (v) => v!.isEmpty ? 'Required' : null,
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               TextFormField(
-                decoration: InputDecoration(labelText: 'Diastolic (mmHg)'),
+                decoration: const InputDecoration(labelText: 'Diastolic (mmHg)'),
                 keyboardType: TextInputType.number,
                 onChanged: (v) => diastolic = v,
                 validator: (v) => v!.isEmpty ? 'Required' : null,
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               TextFormField(
-                decoration: InputDecoration(labelText: 'Pulse'),
+                decoration: const InputDecoration(labelText: 'Heart Rate'),
                 keyboardType: TextInputType.number,
-                onChanged: (v) => pulse = v,
+                onChanged: (v) => heartRate = v,
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: selectedLaterality,
-                items: lateralityOptions
+                value: selectedArmSide,
+                items: armSideOptions
                     .map((v) => DropdownMenuItem(
                           value: v,
                           child: Text(v),
                         ))
                     .toList(),
-                onChanged: (v) => setState(() => selectedLaterality = v),
-                decoration: InputDecoration(labelText: 'Laterality'),
+                onChanged: (v) => setState(() => selectedArmSide = v),
+                decoration: const InputDecoration(labelText: 'Arm Side'),
                 validator: (v) => v == null ? 'Required' : null,
               ),
-              SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: selectedProfile,
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                value: selectedProfileId,
                 items: profileOptions
-                    .map((v) => DropdownMenuItem(
-                          value: v,
-                          child: Text(v),
+                    .map((profile) => DropdownMenuItem(
+                          value: profile['id'] as int,
+                          child: Text(profile['name'] as String),
                         ))
                     .toList(),
-                onChanged: (v) => setState(() => selectedProfile = v),
-                decoration: InputDecoration(labelText: 'Profile'),
+                onChanged: (v) => setState(() => selectedProfileId = v),
+                decoration: const InputDecoration(labelText: 'Profile'),
                 validator: (v) => v == null ? 'Required' : null,
               ),
-              SizedBox(height: 24),
+              const SizedBox(height: 24),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue.shade300,
-                    padding: EdgeInsets.symmetric(vertical: 16)),
+                    padding: const EdgeInsets.symmetric(vertical: 16)),
                 onPressed: () async {
                   if (_formKey.currentState!.validate()) {
                     final reading = BloodPressureReading(
                       systolic: int.parse(systolic),
                       diastolic: int.parse(diastolic),
-                      pulse: pulse.isNotEmpty
-                          ? int.parse(pulse)
-                          : null, // Changed from heartRate to pulse
-                      laterality:
-                          selectedLaterality!, // Changed from lateralitySide
-                      profile: selectedProfile!, // Changed from profileName
-                      date:
-                          selectedDate, // Change 'dateTime' to 'date' (or the correct name)
+                      heartRate: heartRate.isNotEmpty
+                          ? int.parse(heartRate)
+                          : null,
+                      armSide: selectedArmSide!,
+                      dateTime: selectedDate,
+                      profileId: selectedProfileId,
                     );
 
                     try {
@@ -158,11 +156,11 @@ class _AddReadingPageState extends State<AddReadingPage> {
                       Navigator.pop(context, true);
                     } catch (e) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error saving reading')));
+                          const SnackBar(content: Text('Error saving reading')));
                     }
                   }
                 },
-                child: Text('Save Reading'),
+                child: const Text('Save Reading'),
               ),
             ],
           ),

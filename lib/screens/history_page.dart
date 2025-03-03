@@ -11,77 +11,97 @@ class HistoryPage extends StatefulWidget {
 
 class _HistoryPageState extends State<HistoryPage> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
-  Map<String, List<BloodPressureReading>> profileReadings = {};
+  Map<int, List<BloodPressureReading>> groupedReadings = {};
+  List<Map<String, dynamic>> profiles = [];
+  final Map<int, String> _profileNames = {};
 
   @override
   void initState() {
     super.initState();
-    _loadReadings();
+    _loadData();
   }
 
-  Future<void> _loadReadings() async {
+  Future<void> _loadData() async {
     final readings = await _dbHelper.getAllReadings();
-    final grouped = <String, List<BloodPressureReading>>{};
-
-    for (var readingMap in readings) {
-      final reading = BloodPressureReading.fromMap(readingMap);
-      if (!grouped.containsKey(reading.profile)) {
-        grouped[reading.profile] = [];
-      }
-      grouped[reading.profile]!.add(reading);
+    profiles = await _dbHelper.getProfiles();
+    
+    // Create profile name lookup
+    _profileNames.clear();
+    for (final profile in profiles) {
+      _profileNames[profile['id'] as int] = profile['name'] as String;
     }
 
-    setState(() => profileReadings = grouped);
+    // Group readings by profile ID
+    final grouped = <int, List<BloodPressureReading>>{};
+    for (var readingMap in readings) {
+      final reading = BloodPressureReading.fromMap(readingMap);
+      final profileId = reading.profileId ?? 0; // 0 = no profile
+      
+      if (!grouped.containsKey(profileId)) {
+        grouped[profileId] = [];
+      }
+      grouped[profileId]!.add(reading);
+    }
+
+    setState(() => groupedReadings = grouped);
+  }
+
+  String _getProfileName(int profileId) {
+    return _profileNames[profileId] ?? 'Unknown Profile';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('History'),
+        title: const Text('History'),
         backgroundColor: Colors.blue.shade300,
       ),
       body: RefreshIndicator(
-        onRefresh: _loadReadings,
+        onRefresh: _loadData,
         child: ListView.builder(
-          itemCount: profileReadings.keys.length,
+          itemCount: groupedReadings.keys.length,
           itemBuilder: (context, index) {
-            final profile = profileReadings.keys.elementAt(index);
+            final profileId = groupedReadings.keys.elementAt(index);
+            final readings = groupedReadings[profileId]!;
+            
             return Card(
-              margin: EdgeInsets.all(8),
+              margin: const EdgeInsets.all(8),
               child: ExpansionTile(
-                title: Text(profile,
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                children: profileReadings[profile]!
-                    .map((reading) => ListTile(
-                          title: Text(
-                              '${reading.systolic}/${reading.diastolic} mmHg'),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Pulse: ${reading.pulse ?? "N/A"}'),
-                              Text(DateFormat('yyyy-MM-dd')
-                                  .format(reading.date)),
-                              Text('Laterality: ${reading.laterality}'),
-                            ],
+                title: Text(
+                  profileId == 0 ? 'No Profile' : _getProfileName(profileId),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                children: readings.map((reading) => ListTile(
+                  title: Text(
+                    '${reading.systolic}/${reading.diastolic} mmHg',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Heart Rate: ${reading.heartRate ?? "N/A"}'),
+                      Text(DateFormat('yyyy-MM-dd – HH:mm')
+                          .format(reading.dateTime)),
+                      Text('Arm Side: ${reading.armSide}'),
+                    ],
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.edit, color: Colors.blue),
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => EditReadingPage(
+                            reading: reading.toMap(),
+                            documentId: reading.id!,
                           ),
-                          trailing: IconButton(
-                            icon: Icon(Icons.edit),
-                            onPressed: () async {
-                              final result = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => EditReadingPage(
-                                    reading: reading.toMap(),
-                                    documentId: reading.id!,
-                                  ),
-                                ),
-                              );
-                              if (result == true) _loadReadings();
-                            },
-                          ),
-                        ))
-                    .toList(),
+                        ),
+                      );
+                      if (result == true) _loadData();
+                    },
+                  ),
+                )).toList(),
               ),
             );
           },

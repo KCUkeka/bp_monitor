@@ -20,33 +20,48 @@ class _MainPageState extends State<MainPage> {
   Color unselectedItem = Colors.grey;
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
-  Map<String, List<BloodPressureReading>> profileReadings = {};
-  String? selectedProfile;
+  Map<int, List<BloodPressureReading>> groupedReadings = {};
+  final Map<int, String> _profileNames = {};
+  int? selectedProfileId;
 
   @override
   void initState() {
     super.initState();
-    _fetchProfileReadings();
+    _loadData();
   }
 
-  Future<void> _fetchProfileReadings() async {
+  Future<void> _loadData() async {
     final readings = await _dbHelper.getAllReadings();
-    final grouped = <String, List<BloodPressureReading>>{};
+    final profiles = await _dbHelper.getProfiles();
 
+    // Create profile name lookup
+    _profileNames.clear();
+    for (final profile in profiles) {
+      _profileNames[profile['id'] as int] = profile['name'] as String;
+    }
+
+    // Group readings by profile ID
+    final grouped = <int, List<BloodPressureReading>>{};
     for (var readingMap in readings) {
       final reading = BloodPressureReading.fromMap(readingMap);
-      if (!grouped.containsKey(reading.profile)) {
-        grouped[reading.profile] = [];
+      final profileId = reading.profileId ?? 0; // 0 = no profile
+      
+      if (!grouped.containsKey(profileId)) {
+        grouped[profileId] = [];
       }
-      grouped[reading.profile]!.add(reading);
+      grouped[profileId]!.add(reading);
     }
 
     setState(() {
-      profileReadings = grouped;
+      groupedReadings = grouped;
       if (grouped.isNotEmpty) {
-        selectedProfile = grouped.keys.first;
+        selectedProfileId = grouped.keys.first;
       }
     });
+  }
+
+  String _getProfileName(int profileId) {
+    return profileId == 0 ? 'No Profile' : _profileNames[profileId] ?? 'Unknown Profile';
   }
 
   @override
@@ -82,9 +97,9 @@ class _MainPageState extends State<MainPage> {
         onPressed: () async {
           await Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => AddReadingPage()),
+            MaterialPageRoute(builder: (context) => const AddReadingPage()),
           );
-          _fetchProfileReadings();
+          _loadData();
         },
         child: Container(
           width: 60,
@@ -113,11 +128,13 @@ class _MainPageState extends State<MainPage> {
         return HistoryPage();
       case 1:
         return TrendsPage(
-          profileReadings: profileReadings.map((key, value) =>
-              MapEntry(key, value.map((reading) => reading.toMap()).toList())),
+          profileReadings: groupedReadings.map((key, value) => MapEntry(
+            _getProfileName(key),
+            value.map((reading) => reading.toMap()).toList(),
+          )),
         );
       case 2:
-        return ProfilePage();
+        return  ProfilePage();
       default:
         return HistoryPage();
     }
